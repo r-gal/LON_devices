@@ -1,0 +1,877 @@
+/*
+* common.h
+*
+* Created: 2016-01-30 17:27:13
+*  Author: Sikurasaka
+*/
+
+
+#ifndef COMMON_H_
+#define COMMON_H_
+
+#include <avr/io.h>
+#include <avr/interrupt.h>
+#include "Slave.h"
+
+typedef uint8_t W8;
+#define AND &&
+#define OR ||
+
+//#define SW3_DEVICE
+//#define SW6_DEVICE
+//define REL2_DEVICE
+//#define REL4_DEVICE
+//#define REL8_DEVICE
+//#define HIG_DEVICE
+//#define SPEC1_DEVICE
+
+#ifdef SW3_DEVICE
+#define SW_DEVICE
+#define ATTINY25
+#define I_MASC 0x1A
+#define I_DIR DDRB
+#define I_PORT PORTB
+#define I_PIN PINB
+#define ADR3 0x10
+#endif
+
+#ifdef SW6_DEVICE
+#define SW_DEVICE
+#define ATTINY24
+#define I_MASC 0xAF
+#define I_DIR DDRA
+#define I_PORT PORTA
+#define I_PIN PINA
+#define ADR3 0x20
+#endif
+
+#ifdef REL2_DEVICE
+#define TR_DEVICE
+#define ATTINY25
+#define O_MASC 0x18
+#define O_DIR DDRB
+#define O_PORT PORTB
+#define O_PIN PINB
+#define ADR3 0x50
+#endif
+
+#ifdef REL4_DEVICE
+#define TR_DEVICE
+#define ATTINY24
+#define O_MASC 0x8B
+#define O_DIR DDRA
+#define O_PORT PORTA
+#define O_PIN PINA
+#define ADR3 0x50
+#endif
+
+#ifdef REL8_DEVICE
+#define TR_DEVICE
+#define ATTINY261A
+#define O_MASC 0xFF
+#define O_DIR DDRA
+#define O_PORT PORTA
+#define O_PIN PINA
+#define ADR3 0x50
+#endif
+
+#ifdef HIG_DEVICE
+#define HG_DEVICE
+#define ATTINY25
+# define H_DDR DDRB
+# define H_PORT PORTB
+# define H_PIN PINB
+# define H_MASC
+# define ADC_NR 3
+# define HIGRO_ONE_MASC 0x10
+# define HIGRO_TWO_MASC 0x02  /*if 0x00 then not present*/
+#define ADR3 0xA0
+#endif
+
+#ifdef SPEC1_DEVICE
+#define ATTINY24
+#define SW_DEVICE
+#define I_MASC 0x81
+#define I_DIR DDRA
+#define I_PORT PORTA
+#define I_PIN PINA
+#define TR_DEVICE
+#define O_MASC 0x0E
+#define O_DIR DDRA
+#define O_PORT PORTA
+#define O_PIN PINA
+#define ADR3 0xB0
+#endif
+
+
+
+/*end defining values */
+#ifdef ATTINY25
+#define CLK_DIR DDRB
+#define DAT_DIR DDRB
+#define CLK_OUT PORTB
+#define DAT_OUT PORTB
+#define CLK_IN PINB
+#define DAT_IN PINB
+#define CLK_NR 2
+#define DAT_NR 0
+#endif
+
+#ifdef ATTINY24
+#define CLK_DIR DDRA
+#define DAT_DIR DDRA
+#define CLK_OUT PORTA
+#define DAT_OUT PORTA
+#define CLK_IN PINA
+#define DAT_IN PINA
+#define CLK_NR 4
+#define DAT_NR 6
+#endif
+
+#ifdef ATTINY261A
+#define CLK_DIR DDRB
+#define DAT_DIR DDRB
+#define CLK_OUT PORTB
+#define DAT_OUT PORTB
+#define CLK_IN PINB
+#define DAT_IN PINB
+#define CLK_NR 2
+#define DAT_NR 0
+#endif
+
+const W8 LONGADR[] = {ADR3,ADR2,ADR1,ADR0};
+
+void clkDirIn(void) { CLK_DIR &= ~(1<<CLK_NR); }
+void clkDirOut(void) { CLK_DIR |= (1<<CLK_NR); }
+void datDirIn(void) { DAT_DIR &= ~(1<<DAT_NR); }
+void datDirOut(void) { DAT_DIR |= (1<<DAT_NR); }
+
+#define INPUTCHECKCOUNTERMAX 200
+#define INPUTBUFFERSIZE 16
+#define OUTPUTBUFFERSIZE 13
+#define EVENTBUFFERSIZE 10
+#define RETRY_COUNT 10
+
+enum frameCode_et
+{
+	FRAME_ADRCONQUEST = 0,
+	FRAME_DEVCONFIG = 1,
+	FRAME_CHECKDEVICE = 2,
+	FRAME_DATA_SW = 3,
+	FRAME_DATA_TR = 4,
+	FRAME_READ_IO = 5,
+	FRAME_READ_STATUS = 6,
+	FRAME_DETACH_ALL = 7
+};
+
+enum frameAck_et
+{
+	ACK_NORMAL = 0,
+	ACK_ERROR = 1,
+	ACK_UNKNOWN = 2,
+	ACK_INVALID_ARG = 3,
+	ACK_INVALID_CHECKSUM = 0xF
+};
+#define DEFAULT_1B_ACK (ACK_NORMAL | (ACK_NORMAL<<4))
+#define UNKNOWN_1B_ACK (ACK_UNKNOWN | (ACK_UNKNOWN<<4))
+#define INVARG_1B_ACK (ACK_INVALID_ARG | (ACK_INVALID_ARG<<4))
+#define ADRCONQ_1B_ACK_CALCVAR (LONGADR[0] ^ LONGADR[1] ^ LONGADR[2] ^ LONGADR[3])
+#define ADRCONQ_1B_ACK ((ADRCONQ_1B_ACK_CALCVAR ^ (ADRCONQ_1B_ACK_CALCVAR>>4)) & 0x0F)
+
+enum state_et
+{
+	IDLE,
+	BUSY,
+	STARTING,
+	RECEIVING,
+	RECEIVINGACK,
+	SENDING,
+	SENDINGACK,
+	ADRCONQUEST,
+	SENDINGIOSTATE,
+	SENDINGSTATUS
+};
+
+enum event_et
+{
+	EVENT_NO_EVENT = 0,
+	EVENT_CHANGE_UP = 1,
+	EVENT_CHANGE_DOWN = 2,
+	EVENT_PRESSED = 3,
+	EVENT_RELEASED = 4,
+	EVENT_SERIES_CLICK = 5,
+	EVENT_HOLD = 6
+};
+
+/* Global variables */
+
+#ifdef SW_DEVICE
+volatile W8 InputCheckCounter;
+volatile bool inputCheckIndic;
+#endif
+
+volatile W8 shortAdr;
+volatile bool attached;
+
+volatile enum state_et devState;
+
+volatile W8 commonBufferCounter;
+
+volatile W8 inputBuffer[INPUTBUFFERSIZE];
+volatile W8 inputSender;
+volatile W8 inputBytesToReceive;
+volatile W8 inputCheckSum;
+
+volatile W8 outputBuffer[OUTPUTBUFFERSIZE];
+volatile W8 outputBytesToSend;
+volatile bool outputBufferReady;
+volatile W8 outputCheckSum;
+volatile W8 outputRetryCnt;
+
+volatile W8 noOfCollisions;
+
+#ifdef SW_DEVICE
+volatile W8 eventBuffer[EVENTBUFFERSIZE];
+volatile W8 noOfEventsStored;
+
+volatile W8 monostable;
+volatile W8 inverted;
+volatile W8 pressCounter[8];
+volatile W8 pressCounterMax;
+volatile W8 waitCounter[8];
+volatile W8 waitCounterMax;
+volatile W8 storedState;
+volatile W8 pressState;
+
+#endif
+
+#ifdef ADC_DEVICE
+#define ADC_PIN_MASC 0x08
+volatile W8 adc;
+#endif
+
+#ifdef HG_DEVICE
+
+volatile W8 higroL[2],higroH[2], termL[2], termH[2];
+volatile W8 actDevMasc;
+volatile W8 wireBuffer[5];
+volatile W8 wireByteCnt, wireBitCnt;
+volatile W8 phase;
+
+#endif
+
+
+volatile W8 enableIO;
+
+int main(void)
+{
+	
+	devState = IDLE;
+	attached = false;
+
+	#ifdef SW_DEVICE
+	inputCheckIndic = false;
+	noOfEventsStored = 0;
+	pressCounterMax = 75; /* about 1.5s */
+	waitCounterMax = 150; /* about 3s */
+	/* ustawienie portów IO */
+	I_DIR &= ~I_MASC;
+	storedState = I_PIN;
+	pressState = 0;
+	#endif
+
+	#ifdef TR_DEVICE
+	O_DIR |= O_MASC;
+	O_PORT &= ~O_MASC;
+	#endif
+
+	#ifdef ADC_DEVICE
+	/* set and run ADC */
+	DIDR = ADC_PIN_MASC;
+	ADMUX = ustawiæ dobrze
+	ADCSRA |= ADEN | ADSC | ADATE;
+	#endif
+
+	#ifdef HG_DEVICE
+	/* set IO pins */
+	
+	H_PORT &= ~HIGRO_ONE_MASC;
+	if (HIGRO_TWO_MASC != 0xFF)  H_PORT &= ~HIGRO_TWO_MASC;
+	H_DDR &= ~HIGRO_ONE_MASC;
+	if (HIGRO_TWO_MASC != 0xFF)  H_DDR &= ~HIGRO_TWO_MASC;
+
+	/* set and run interrupt  for transfer*/
+
+	/* set variables */
+	actDevMasc = HIGRO_ONE_MASC;
+	phase = 0;
+	#endif
+
+	clkDirIn();
+	datDirIn();	
+	CLK_OUT |= 1<<CLK_NR;
+	DAT_OUT |= 1<<DAT_NR;
+	outputBufferReady = false;
+	#ifdef _AVR_IOTN25_H_
+	USICR = 0xF8  ; /* USISIE = 1, USIOIE = 1, USIWM = 11, USICS = 10, USICLK = 0 */
+	TCCR0A = 0x02; /* CTC Mode, prescaler = 8 */
+	TCCR0B = 0x02;
+	OCR0A = 124; /* when FCLK = 20Mhz, interrupt frequency = 10khz */
+	TIMSK |= (1<<OCIE0A);
+	#endif
+	#ifdef _AVR_ATtiny24A_H_
+	USICR = 0xF8  ; /* USISIE = 1, USIOIE = 1, USIWM = 11, USICS = 10, USICLK = 0 */
+	TCCR0A = 0x02; /* CTC Mode, prescaler = 8 */
+	TCCR0B = 0x02;
+	OCR0A = 124; /* when FCLK = 20Mhz, interrupt frequency = 10khz */
+	TIMSK0 |= (1<<OCIE0A);
+	#endif
+	
+	sei();
+
+	
+	noOfCollisions = 0;
+	
+	
+	while(1)
+	{
+		#ifdef SW_DEVICE
+		if(inputCheckIndic == true)
+		{
+			enableIO &= I_MASC;
+			W8 chCounter = 0;
+			W8 counterMasc;
+			W8 actState = I_PIN;
+			for(counterMasc = 0x01;counterMasc!=00;counterMasc=counterMasc<<1)
+			{
+				if(counterMasc & enableIO)
+				{					
+					event_et currentEvent = EVENT_NO_EVENT;
+
+					if(monostable & counterMasc)
+					{
+						if(counterMasc & (storedState ^ actState)) /* any change */
+						{
+							if((actState ^ inverted) & counterMasc)
+							{
+								pressState |= counterMasc;
+								pressCounter[chCounter] = 0;
+								if(waitCounter[chCounter] < waitCounterMax)
+								{
+									currentEvent = EVENT_SERIES_CLICK;
+								}
+								else
+								{
+									currentEvent = EVENT_PRESSED;
+								}
+							}
+							else
+							{
+								pressState &= ~counterMasc;
+								currentEvent = EVENT_RELEASED;
+								waitCounter[chCounter] = 0;
+							}							
+						}
+						else if(pressState & counterMasc)
+						{
+							if(pressCounter[chCounter] < pressCounterMax)
+							{
+								pressCounter[chCounter]++;
+							}
+							else
+							{
+								pressCounter[chCounter] = 0;
+								currentEvent = EVENT_HOLD;
+							}
+						}
+					}
+					else /*bistable */
+					{
+						if(counterMasc & (storedState ^ actState)) /* any change */
+						{
+							if((actState ^ inverted) & counterMasc)
+							{
+								currentEvent = EVENT_CHANGE_UP;
+							}
+							else
+							{
+								currentEvent = EVENT_CHANGE_DOWN;
+							}
+						}						
+					}
+					if(waitCounter[chCounter] < waitCounterMax)
+					{
+						waitCounter[chCounter]++;					
+					}
+
+					if(currentEvent != EVENT_NO_EVENT)
+					{
+						if(noOfEventsStored < EVENTBUFFERSIZE)
+						{
+							eventBuffer[noOfEventsStored] = chCounter<<4 | currentEvent;
+							noOfEventsStored++;
+						}
+					}
+				}
+				chCounter++;
+			}
+			inputCheckIndic = false;
+			storedState = actState;
+			} /* inputCheckIndic == true */
+			
+			#endif
+			
+
+			#ifdef SW_DEVICE
+			if((outputBufferReady == false)
+			AND
+			(attached == true)
+			AND
+			(noOfEventsStored>0))
+			{
+				/*previous frame has been succesfully sent, create new. */
+				W8 counter = 0;
+				W8 checkSum = shortAdr;
+				outputBuffer[counter++] = shortAdr;
+				W8 code = (FRAME_DATA_SW<<4) | (noOfEventsStored+3);
+				outputBuffer[counter++] = code;
+				checkSum ^=code;
+				for(W8 i=0;i<noOfEventsStored;i++)
+				{
+					W8 event = eventBuffer[i];
+					outputBuffer[counter++] = event;
+					checkSum ^= event;
+				}
+				outputBuffer[counter] = checkSum;
+				noOfEventsStored = 0;
+				outputRetryCnt = RETRY_COUNT;
+				outputBufferReady = true;				
+			}
+			#endif
+
+			#ifdef HG_DEVICE
+			if(phase == 4) /*transfer completed */
+			{
+				/* check CS */
+				/* write to correct device */
+				/* change device */
+				phase =0;
+			}
+			if((phase == 0) && (1 /* it is time to measurement*/))
+			{
+				wireBitCnt = 0x01;
+				wireByteCnt = 0;
+				for(W8 i=0;i<5;i++) { wireBuffer[i] = 0; }
+				/* init timer interrupt - start over 18ms */
+			}
+			#endif
+
+			} /* main loop */
+			} /*main */
+
+			#ifdef _AVR_IOTN25_H_
+			ISR(TIMER0_COMPA_vect)
+			#endif
+			#ifdef _AVR_ATtiny24A_H_
+			ISR(TIM0_COMPA_vect)
+			#endif
+			#ifdef _AVR_ATtiny261A_H_
+			ISR(TIMER0_COMPA_vect)
+			#endif
+			{
+				#ifdef SW_DEVICE
+				if(InputCheckCounter <INPUTCHECKCOUNTERMAX)
+				{
+					InputCheckCounter++;
+				}
+				else
+				{
+					InputCheckCounter = 0;
+					inputCheckIndic = true;
+				}
+				#endif
+				if((USISR & (1<<USIDC))&&((CLK_IN & (1<<CLK_NR)) == 0)) /* collision detected */
+				{
+					
+					if(devState == SENDING)
+					{
+						devState = RECEIVING;
+						if (noOfCollisions < 0xFF) {noOfCollisions++; }
+						datDirIn();
+
+					}
+					else if(devState == ADRCONQUEST)
+					{						
+						devState = IDLE;
+						datDirIn();						
+					}
+				}
+				} /*interrupt(counter 10khz) */
+
+				ISR(USI_OVF_vect)
+				{
+							
+					W8 tmpVal;
+					#ifdef TR_DEVICE
+					W8 masc;
+					#endif
+					/*One byte has been transmitted, check all, and allow to transmit next byte. */					
+					switch(devState)
+					{		
+						case STARTING:
+						commonBufferCounter = 0;
+
+						if(outputBufferReady == true)
+						{
+							if(outputRetryCnt == 0) 
+							{
+								outputBufferReady = false; /* delete frame */
+								devState = RECEIVING;								
+								inputBytesToReceive = INPUTBUFFERSIZE;
+								inputCheckSum = 0;
+								datDirIn();	
+							}		
+							else
+							{
+								devState = SENDING;
+								USIDR =  outputBuffer[commonBufferCounter++];
+								outputBytesToSend = outputBuffer[commonBufferCounter] &0x0F;
+								outputRetryCnt--;
+								datDirOut();									
+							}
+
+						}
+						else
+						{
+							devState = RECEIVING;
+							
+							inputBytesToReceive = INPUTBUFFERSIZE;
+							inputCheckSum = 0;
+							datDirIn();
+						}
+						break;
+										
+						case RECEIVING:
+						{							
+							W8 dataIn = USIDR;
+							inputBuffer[commonBufferCounter] = dataIn;
+							commonBufferCounter++;
+							inputCheckSum ^= dataIn;
+
+							if(commonBufferCounter == 2)
+							{
+								inputBytesToReceive = dataIn&0x0F;															
+							}    
+							if(commonBufferCounter == inputBytesToReceive)
+							{								
+								if(inputCheckSum == 0x00)
+								{
+									W8 code = inputBuffer[1] >> 4;
+									if(code == FRAME_ADRCONQUEST)
+									{										
+										if(attached == false)
+										{
+											commonBufferCounter = 0;
+											datDirOut();	
+											USIDR = LONGADR[commonBufferCounter++];																					
+											devState = ADRCONQUEST;																																											
+										}
+										else
+										{
+											devState = IDLE;
+										}
+										USISR = 0x80; /* clear USICNT counter and another status bits, also clock holding*/
+										break;
+									}
+									else if(code == FRAME_DEVCONFIG)
+									{	
+										
+										//FRAME_DEVCONFIG   | 0  | C/13 | A0..A3 | Sadr|Conf0|Conf1|Conf2|Conf3|Conf4|CS| [ACK/CS]
+										W8 i = 2;										
+										if((inputBuffer[i++] == LONGADR[0]) &&
+										    (inputBuffer[i++] == LONGADR[1]) &&
+											(inputBuffer[i++] == LONGADR[2]) &&
+											(inputBuffer[i++] == LONGADR[3]))
+										{		
+											shortAdr = inputBuffer[i++];
+											attached = true;
+											enableIO = inputBuffer[i++];
+											#ifdef SW_DEVICE
+											monostable = inputBuffer[i++];
+											inverted = inputBuffer[i++];
+											pressCounterMax = inputBuffer[i++];
+											waitCounterMax = inputBuffer[i];
+											#endif
+											USIDR = DEFAULT_1B_ACK;
+											devState = RECEIVINGACK;
+											datDirOut();	
+											break;
+										}	
+										else
+										{
+											devState = IDLE;
+										}	
+									}
+									else if(code == FRAME_CHECKDEVICE)
+									{
+										W8 i = 2;
+										if((inputBuffer[i++] == LONGADR[0]) &&
+										(inputBuffer[i++] == LONGADR[1]) &&
+										(inputBuffer[i++] == LONGADR[2]) &&
+										(inputBuffer[i++] == LONGADR[3]))
+										{
+											USIDR = DEFAULT_1B_ACK;
+											devState = RECEIVINGACK;
+											datDirOut();
+										}
+										else
+										{
+											devState = IDLE;
+										}
+									}
+									else if(code == FRAME_DETACH_ALL)
+									{
+										attached = false;
+										USIDR = DEFAULT_1B_ACK;
+										devState = RECEIVINGACK;
+										datDirOut();
+									}
+									else if(inputBuffer[2] == shortAdr)
+									{
+										
+										/* Frame correct, send ACK */
+										devState = RECEIVINGACK;
+										switch(code)
+										{
+											case FRAME_READ_IO:
+											#ifdef SW_DEVICE
+											tmpVal = I_PIN;
+											#endif
+											#ifdef TR_DEVICE
+											tmpVal = O_PIN;
+											#endif
+											/* if ACK_NORMAL == 0 */
+											outputCheckSum = tmpVal;
+											USIDR = tmpVal;
+											devState = SENDINGIOSTATE;
+											break;
+											case FRAME_READ_STATUS:
+											if(inputBuffer[3] == 0)
+											{
+												tmpVal = noOfCollisions;
+												outputCheckSum = tmpVal;
+												USIDR = tmpVal;
+												devState = SENDINGSTATUS;
+												commonBufferCounter = 0;
+											}
+											else if(inputBuffer[3] == 1)
+											{
+												noOfCollisions = 0;
+												USIDR = DEFAULT_1B_ACK;
+											}
+											else
+											{
+												USIDR = INVARG_1B_ACK;
+											}
+											break;
+
+											#ifdef TR_DEVICE
+											case FRAME_DATA_TR:
+											//PORTB ^= (1<<3);
+											masc = 1<<inputBuffer[3];
+											if(masc & O_MASC)
+											{
+												if(inputBuffer[4] > 0 )
+												{
+													O_PORT |= masc;
+												}
+												else
+												{
+													O_PORT &= ~masc;
+												}
+											}
+											USIDR = DEFAULT_1B_ACK;
+											break;
+											#endif
+											default:
+											USIDR = UNKNOWN_1B_ACK;
+											break;
+										}
+										datDirOut();
+									}
+									else
+									{
+										devState = IDLE;
+									}
+								}
+								else
+								{
+									devState = IDLE;
+								}
+
+							}
+							else if(commonBufferCounter > inputBytesToReceive) /* error */
+							{
+								devState = IDLE;
+							}
+							USISR = 0x00; /* clear USICNT counter and another status bits, also clock holding*/
+							break;
+						}
+						case RECEIVINGACK:
+						{
+							devState = IDLE;
+							datDirIn();
+							USISR = 0x00; /* clear USICNT counter and another status bits, also clock holding*/
+							break;
+						}
+						case SENDING:
+						{
+							if(commonBufferCounter < outputBytesToSend)
+							{
+								USIDR = outputBuffer[commonBufferCounter];
+								commonBufferCounter++;
+							}
+							else
+							{
+								devState = SENDINGACK;
+								datDirIn();
+							}
+							USISR = 0x00; /* clear USICNT counter and another status bits, also clock holding*/
+							break;
+						}
+						case SENDINGACK:
+						{
+							if(USIDR == 0)
+							{
+								outputBufferReady = false;
+							}
+							USISR = 0x00; /* clear USICNT counter and another status bits, also clock holding*/
+							break;
+						}
+						case ADRCONQUEST:
+						{
+							
+							if(commonBufferCounter<4)
+							{
+								USIDR = LONGADR[commonBufferCounter++];
+								datDirOut();
+							}
+							else
+							{
+								USIDR =  ADRCONQ_1B_ACK ;
+								devState = RECEIVINGACK;
+							}
+							
+							USISR = 0x00; /* clear USICNT counter and another status bits, also clock holding*/
+							break;
+						}
+						case SENDINGIOSTATE:
+						case SENDINGSTATUS:
+						{
+							tmpVal = outputCheckSum;
+							USISR =  (tmpVal ^ ( tmpVal>>4)) & 0x0F;
+							devState = RECEIVINGACK;
+							break;
+						}
+						default:
+						{
+							devState = IDLE;
+							USISR = 0x00; /* clear USICNT counter and another status bits, also clock holding*/
+							break;
+						}
+					}
+					USISR = 0x40;
+					} /* interrupt(counter_USI_overflow) */
+
+					
+					#ifdef _AVR_IOTN25_H_
+					ISR(USI_START_vect)
+					#endif
+					#ifdef _AVR_ATtiny24A_H_
+					ISR(USI_STR_vect)
+					#endif
+					#ifdef _AVR_ATtiny261A_H_
+					ISR(USI_START_vect)
+					#endif
+					{
+						/* interrupt occured, clock is hold, when block is ready it should be cleared to start transmision */
+
+						devState = STARTING;
+						USISR = 0x8F;
+
+						
+						} /* interrupt(USI_start) */
+
+						#ifdef _AVR_IOTN25_H_
+						ISR(TIMER1_COMPA_vect)
+						#endif
+						#ifdef _AVR_ATtiny24A_H_
+						ISR(TIM1_COMPA_vect)
+						#endif
+						#ifdef _AVR_ATtiny261A_H_
+						ISR(TIMER1_COMPA_vect)
+						#endif
+						{
+							#ifdef HG_DEVICE
+							if(phase ==0)
+							{
+								phase = 1;
+								/* enable pin change interrupt */
+								/* clear timer counter */
+							}
+							else
+							{
+								/*timeout error */
+								/* disable timer and pin change interrupt*/
+								phase = 0;
+							}
+							#endif
+						}
+
+						#ifdef HG_DEVICE
+						ISR(SIG_PIN_CHANGE)
+						{
+							if((H_PIN & actDevMasc) == 0)
+							{
+								switch(phase)
+								{
+									case 1:
+									case 2:
+									phase++;
+									break;
+									case 3:
+									if(timercounter >50) { wireBuffer[wireByteCnt] |= wireBitCnt; }
+									if(wireBitCnt == 0x80)
+									{
+										if(wireByteCnt ==4)
+										{
+											phase = 3;
+											/*disable interrupts */
+										}
+										else
+										{
+											wireByteCnt++;
+											wireBitCnt = 0x01;
+										}
+									}
+									else
+									{
+										wireBitCnt = wireBitCnt<<1;
+									}
+									
+									break;
+									default:
+									phase = 0;
+									/*disable pin change and timer interrupt */
+									break;
+								}
+							}
+							/*clear timer counter */
+						}
+						#endif
+
+
+
+
+
+						#endif /* COMMON_H_ */
